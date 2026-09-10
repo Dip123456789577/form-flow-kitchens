@@ -1,49 +1,335 @@
-import { Bot, MessageCircle, Send, X } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import {
+  Bot,
+  Calendar,
+  ChevronRight,
+  CornerDownLeft,
+  MessageCircle,
+  RotateCcw,
+  Send,
+  Sparkles,
+  User,
+  X,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 
-type Message = { role: "assistant" | "user"; text: string };
-const greeting = "Hi! I'm your kitchen renovation assistant. I can help you explore renovation options, understand our process, and prepare for a consultation.";
-const suggestions = ["How much does a kitchen renovation cost?", "How long does a renovation take?", "What services do you offer?", "Can you help design my kitchen?", "How do I book a consultation?"];
+type Message = {
+  role: "assistant" | "user";
+  text: string;
+  action?: { label: string; to: string } | undefined;
+};
 
-function getResponse(input: string) {
-  const text = input.toLowerCase();
-  if (text.includes("cost") || text.includes("budget")) return "Kitchen costs vary with size, layout changes, cabinetry and materials. As a planning guide, full renovations often begin around $30,000, while highly custom projects can be considerably more. A consultation helps us give you a realistic range.";
-  if (text.includes("long") || text.includes("time")) return "Most complete kitchen renovations take 8–14 weeks on site after design and ordering. Custom cabinetry and permitting affect the schedule, so we build a clear project plan before work begins.";
-  if (text.includes("service")) return "We handle complete renovations, design, custom cabinetry, surfaces, lighting, flooring, fixtures and full project management—all coordinated by one dedicated team.";
-  if (text.includes("design")) return "Yes. We begin with how you use the room, then develop the layout, storage, lighting, materials and details into one cohesive design.";
-  if (text.includes("book") || text.includes("consult")) return "You can book a free consultation from any page. Share a few project details and our studio will follow up to arrange a convenient conversation.";
-  return "That’s a helpful place to start. Our team can talk through your priorities, layout and likely investment during a free consultation. Would you like to know about timing, services or the first design meeting?";
+const INITIAL_GREETING =
+  "Hi! I'm your kitchen renovation assistant. I can help you explore renovation options, understand our process, and prepare for a consultation.";
+
+const SUGGESTED_QUESTIONS = [
+  "How much does a kitchen renovation cost?",
+  "How long does a renovation take?",
+  "What services do you offer?",
+  "Can you help design my kitchen?",
+  "How do I book a consultation?",
+];
+
+function getAssistantResponse(input: string): {
+  text: string;
+  action?: { label: string; to: string };
+} {
+  const query = input.toLowerCase();
+
+  if (
+    query.includes("cost") ||
+    query.includes("budget") ||
+    query.includes("price") ||
+    query.includes("estimate")
+  ) {
+    return {
+      text: "Kitchen renovations typically range depending on layout modifications, cabinetry craftsmanship, and surface selections. Most comprehensive transformations begin around $30,000, while larger architectural overhauls with custom marble and bespoke joinery range from $50,000+. We provide transparent, itemized fixed-price proposals during your free consultation.",
+      action: { label: "Schedule Budget Consultation", to: "/contact" },
+    };
+  }
+
+  if (
+    query.includes("long") ||
+    query.includes("time") ||
+    query.includes("schedule") ||
+    query.includes("duration") ||
+    query.includes("weeks")
+  ) {
+    return {
+      text: "On average, a full kitchen renovation takes 8 to 12 weeks of active on-site work following design sign-off and material procurement. Because we manufacture custom millwork and pre-order all slabs and fixtures before demolition, site disruption is minimized.",
+      action: { label: "Review Our 4-Step Process", to: "/#process" },
+    };
+  }
+
+  if (
+    query.includes("service") ||
+    query.includes("offer") ||
+    query.includes("cabinet") ||
+    query.includes("countertop")
+  ) {
+    return {
+      text: "FORMA provides end-to-end service: Architectural Kitchen Design, Custom Dovetail Cabinetry, Natural Stone & Quartz Slabs, Lighting & Electrical Layouts, Flooring & Tile, and Full On-Site Project Management. You have one accountable team throughout.",
+      action: { label: "Explore Our Full Services", to: "/#services" },
+    };
+  }
+
+  if (
+    query.includes("design") ||
+    query.includes("architect") ||
+    query.includes("layout") ||
+    query.includes("style")
+  ) {
+    return {
+      text: "Yes, absolutely. Our design team starts by studying how your family lives, cooks, and gathers. We generate 3D architectural renders, elevation drawings, and physical material palettes before any construction begins.",
+      action: { label: "Explore Our Design Philosophy", to: "/about" },
+    };
+  }
+
+  if (
+    query.includes("book") ||
+    query.includes("consult") ||
+    query.includes("contact") ||
+    query.includes("meeting")
+  ) {
+    return {
+      text: "Booking a consultation is free and straightforward! Simply share a few details about your home and goals on our contact page, and our senior design director will contact you to schedule an on-site walkthrough.",
+      action: { label: "Book Free Consultation", to: "/contact" },
+    };
+  }
+
+  if (query.includes("material") || query.includes("stone") || query.includes("wood")) {
+    return {
+      text: "We work with rift-cut and quarter-sawn white oak, walnut, Calacatta and Carrara marble, resilient quartzite, and hand-forged solid brass hardware. All finishes are selected for both timeless aesthetics and enduring durability.",
+    };
+  }
+
+  return {
+    text: "Thank you for reaching out! Every kitchen project is unique. Our studio team would be glad to discuss your specific home layout, materials, and vision during a complimentary consultation.",
+    action: { label: "Request Free Consultation", to: "/contact" },
+  };
 }
 
 export function Chatbot() {
-  const [open, setOpen] = useState(false);
-  const [input, setInput] = useState("");
-  const [typing, setTyping] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([{ role: "assistant", text: greeting }]);
+  const [isOpen, setIsOpen] = useState(false);
+  const [inputValue, setInputValue] = useState("");
+  const [isTyping, setIsTyping] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([
+    { role: "assistant", text: INITIAL_GREETING },
+  ]);
+
   const inputRef = useRef<HTMLInputElement>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { if (open) inputRef.current?.focus(); }, [open, typing]);
-  useEffect(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), [messages, typing]);
+  useEffect(() => {
+    if (isOpen) {
+      setTimeout(() => inputRef.current?.focus(), 150);
+    }
+  }, [isOpen]);
 
-  const send = (text: string) => {
-    const clean = text.trim().slice(0, 500);
-    if (!clean || typing) return;
-    setMessages((current) => [...current, { role: "user", text: clean }]);
-    setInput(""); setTyping(true);
-    window.setTimeout(() => { setMessages((current) => [...current, { role: "assistant", text: getResponse(clean) }]); setTyping(false); }, 650);
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, isTyping]);
+
+  const handleSendMessage = (textToSend?: string) => {
+    const query = (textToSend || inputValue).trim();
+    if (!query || isTyping) return;
+
+    setMessages((prev) => [...prev, { role: "user", text: query }]);
+    setInputValue("");
+    setIsTyping(true);
+
+    // Simulate intelligent assistant response delay
+    window.setTimeout(() => {
+      const response = getAssistantResponse(query);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          text: response.text,
+          action: response.action,
+        },
+      ]);
+      setIsTyping(false);
+    }, 600);
   };
 
-  return <div className="fixed bottom-5 right-5 z-[70] sm:bottom-7 sm:right-7">
-    {open && <section className="chat-window" aria-label="Kitchen assistant" aria-live="polite">
-      <header className="flex items-center justify-between border-b border-border px-5 py-4"><div className="flex items-center gap-3"><span className="grid h-9 w-9 place-items-center bg-primary text-primary-foreground"><Bot size={18} /></span><div><p className="text-sm font-semibold">Kitchen Assistant</p><p className="text-xs text-muted-foreground">FORMA Studio</p></div></div><Button variant="ghost" size="icon" onClick={() => setOpen(false)} aria-label="Close kitchen assistant"><X size={18} /></Button></header>
-      <div className="h-[360px] overflow-y-auto px-4 py-5 sm:h-[390px]">
-        <div className="space-y-4">{messages.map((message, index) => <div key={`${message.role}-${index}`} className={message.role === "user" ? "ml-auto max-w-[86%] bg-primary px-4 py-3 text-sm leading-6 text-primary-foreground" : "max-w-[92%] text-sm leading-6 text-foreground"}>{message.text}</div>)}{typing && <p className="text-sm italic text-muted-foreground">Thinking…</p>}<div ref={bottomRef} /></div>
-        {messages.length === 1 && <div className="mt-6 flex flex-wrap gap-2">{suggestions.map((question) => <button key={question} className="border border-border bg-muted/50 px-3 py-2 text-left text-xs leading-5 transition-colors hover:border-accent" onClick={() => send(question)}>{question}</button>)}</div>}
+  const handleResetChat = () => {
+    setMessages([{ role: "assistant", text: INITIAL_GREETING }]);
+    setInputValue("");
+    setIsTyping(false);
+  };
+
+  return (
+    <div className="fixed bottom-5 right-5 z-50 sm:bottom-8 sm:right-8">
+      {/* Expanded Chat Panel */}
+      {isOpen && (
+        <section
+          className="chat-window border border-border bg-card shadow-2xl rounded-xs flex flex-col"
+          aria-label="FORMA Kitchen Renovation Assistant"
+          aria-live="polite"
+        >
+          {/* Header */}
+          <header className="flex items-center justify-between border-b border-border bg-surface px-5 py-4">
+            <div className="flex items-center gap-3">
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                <Bot size={18} className="text-accent" />
+              </span>
+              <div>
+                <p className="text-sm font-semibold tracking-wide text-foreground">
+                  Kitchen Assistant
+                </p>
+                <div className="flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+                    FORMA Studio Online
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <button
+                onClick={handleResetChat}
+                className="p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-xs hover:bg-background/80"
+                title="Restart conversation"
+                aria-label="Restart conversation"
+              >
+                <RotateCcw size={15} />
+              </button>
+              <button
+                onClick={() => setIsOpen(false)}
+                className="p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-xs hover:bg-background/80"
+                aria-label="Close assistant"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          </header>
+
+          {/* Messages Body */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 max-h-[380px] sm:max-h-[420px] bg-background">
+            {messages.map((msg, index) => (
+              <div
+                key={index}
+                className={`flex gap-2.5 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+              >
+                {msg.role === "assistant" && (
+                  <div className="flex h-7 w-7 shrink-0 select-none items-center justify-center rounded-full bg-surface border border-border text-accent text-xs">
+                    <Bot size={13} />
+                  </div>
+                )}
+                <div
+                  className={`rounded-xs p-3.5 text-xs sm:text-sm leading-relaxed max-w-[85%] ${
+                    msg.role === "user"
+                      ? "bg-primary text-primary-foreground border border-primary"
+                      : "bg-surface text-foreground border border-border"
+                  }`}
+                >
+                  <p>{msg.text}</p>
+                  {msg.action && (
+                    <div className="mt-3 pt-2.5 border-t border-border/70">
+                      <Link
+                        to={msg.action.to}
+                        onClick={() => setIsOpen(false)}
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-accent hover:underline"
+                      >
+                        <span>{msg.action.label}</span>
+                        <ChevronRight size={13} />
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            {/* Typing Indicator */}
+            {isTyping && (
+              <div className="flex gap-2.5 justify-start">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-surface border border-border text-accent text-xs">
+                  <Bot size={13} />
+                </div>
+                <div className="rounded-xs p-3.5 bg-surface text-muted-foreground border border-border flex items-center gap-1.5">
+                  <span
+                    className="h-1.5 w-1.5 rounded-full bg-accent animate-bounce"
+                    style={{ animationDelay: "0ms" }}
+                  />
+                  <span
+                    className="h-1.5 w-1.5 rounded-full bg-accent animate-bounce"
+                    style={{ animationDelay: "150ms" }}
+                  />
+                  <span
+                    className="h-1.5 w-1.5 rounded-full bg-accent animate-bounce"
+                    style={{ animationDelay: "300ms" }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Quick Suggestion Chips (when only greeting is present) */}
+            {messages.length === 1 && !isTyping && (
+              <div className="pt-2">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">
+                  Suggested Questions:
+                </p>
+                <div className="flex flex-col gap-1.5">
+                  {SUGGESTED_QUESTIONS.map((question) => (
+                    <button
+                      key={question}
+                      onClick={() => handleSendMessage(question)}
+                      className="text-left text-xs text-foreground bg-surface hover:bg-stone/50 border border-border px-3 py-2 rounded-xs transition-colors"
+                    >
+                      {question}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Chat Input Field */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSendMessage();
+            }}
+            className="border-t border-border bg-surface p-3 flex items-center gap-2"
+          >
+            <input
+              ref={inputRef}
+              type="text"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              placeholder="Ask about design, pricing, timing..."
+              className="flex-1 bg-background border border-border px-3.5 py-2 text-xs sm:text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-accent rounded-xs"
+              maxLength={400}
+            />
+            <button
+              type="submit"
+              disabled={!inputValue.trim() || isTyping}
+              aria-label="Send message"
+              className="h-9 w-9 shrink-0 flex items-center justify-center rounded-xs bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-opacity"
+            >
+              <Send size={15} />
+            </button>
+          </form>
+        </section>
+      )}
+
+      {/* Floating Launcher Trigger */}
+      <div className="group relative">
+        <span className="chat-tooltip">Ask our Kitchen Assistant</span>
+        <button
+          onClick={() => setIsOpen((prev) => !prev)}
+          className="flex h-13 w-13 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-xl border border-accent/40 hover:scale-105 active:scale-95 transition-all duration-200"
+          aria-label={isOpen ? "Close Kitchen Assistant" : "Open Kitchen Assistant"}
+          aria-expanded={isOpen}
+        >
+          {isOpen ? <X size={22} /> : <MessageCircle size={22} className="text-accent" />}
+        </button>
       </div>
-      <form className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 border-t border-border p-3" onSubmit={(event) => { event.preventDefault(); send(input); }}><input ref={inputRef} value={input} onChange={(event) => setInput(event.target.value)} maxLength={500} placeholder="Ask about your renovation…" className="min-w-0 border border-input bg-background px-3 text-sm outline-none focus:border-ring" aria-label="Message" /><Button size="icon" disabled={!input.trim() || typing} aria-label="Send message"><Send size={17} /></Button></form>
-    </section>}
-    <div className="group relative ml-auto mt-3 w-fit"><span className="chat-tooltip">Ask our Kitchen Assistant</span><Button size="icon" className="h-14 w-14 rounded-full shadow-xl" onClick={() => setOpen((value) => !value)} aria-label="Ask our Kitchen Assistant">{open ? <X /> : <MessageCircle />}</Button></div>
-  </div>;
+    </div>
+  );
 }
